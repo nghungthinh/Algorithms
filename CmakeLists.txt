@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.10)
+project( Algorithms )
+
+# Version Eigen required C++ >= 14
+set(CMAKE_CXX_STANDARD 14)
+
+find_package(Eigen3 REQUIRED )
+
+# Thêm các tệp nguồn của bạn
+add_executable( Hungarian Hungarian.cpp Hungarian.h)
+
+# Liên kết thư viện Eigen với dự án của bạn
+target_link_libraries(Hungarian Eigen3::Eigen)
