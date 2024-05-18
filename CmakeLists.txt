@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 14)
 find_package(Eigen3 REQUIRED )
 
 # Thêm các tệp nguồn của bạn
-add_executable( Hungarian Hungarian.cpp Hungarian.h)
+add_executable( main main.cpp Hungarian.cpp Hungarian.h)
 
 # Liên kết thư viện Eigen với dự án của bạn
-target_link_libraries(Hungarian Eigen3::Eigen)
+target_link_libraries(main Eigen3::Eigen)
