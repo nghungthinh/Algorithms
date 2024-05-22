@@ -1,50 +1,55 @@
-#include <iostream>
-#include <Eigen/Dense>
-#include <vector>
 #include "Hungarian.h"
 
-
-HungarianAlgorithm::HungarianAlgorithm(Eigen::MatrixXd cost_matrix)
+HungarianAlgorithm::HungarianAlgorithm(const std::vector<std::vector<double>> &values)
 {
+    Eigen::MatrixXd cost_matrix = create_CostMatrix(values);
+    // Handle non-square matrix by adding dummy rows or columns
+    int max_size = std::max(cost_matrix.rows(), cost_matrix.cols());
+    Eigen::MatrixXd square_matrix = Eigen::MatrixXd::Constant(max_size, max_size, 0);
+    square_matrix.block(0, 0, cost_matrix.rows(), cost_matrix.cols()) = cost_matrix;
+
     this->_rows = cost_matrix.rows();
     this->_cols = cost_matrix.cols();
-    this->_cost_matrix = cost_matrix;
-    this->_u = std::vector<int>(_rows + 1, 0);
-    this->_v = std::vector<int>(_cols + 1, 0);
-    this->_assignment = std::vector<int>(this->_cols + 1, 0);
-    this->_path = std::vector<int>(this->_cols + 1, 0);
-    this->_reduced_cost_matrix = Reduced_Cost_Matrix(cost_matrix);
+    this->_square_matrix_size = max_size;
+    this->_cost_matrix = square_matrix;
+    this->_u = std::vector<int>(_square_matrix_size + 1, 0);
+    this->_v = std::vector<int>(_square_matrix_size + 1, 0);
+    this->_assignment = std::vector<int>(_square_matrix_size + 1, 0);
+    this->_path = std::vector<int>(_square_matrix_size + 1, 0);
+    this->_reduced_cost_matrix = Reduced_Cost_Matrix(square_matrix);
 }
 
-void HungarianAlgorithm::solve(std::vector<int>& assignment, Eigen::MatrixXd &matching_assignment)
+void HungarianAlgorithm::solve(std::vector<int> &assignment, Eigen::MatrixXd &matching_assignment, double &total_cost)
 {
-    Assigment_Optimize();
-    Extract_Assignment(assignment, matching_assignment);
+    Assignment_Optimize();
+    Extract_Assignment(assignment, matching_assignment, total_cost);
 }
 
-Eigen::MatrixXd HungarianAlgorithm::Reduced_Cost_Matrix(Eigen::MatrixXd reduced_matrix)
+Eigen::MatrixXd HungarianAlgorithm::Reduced_Cost_Matrix(const Eigen::MatrixXd &matrix)
 {
+    Eigen::MatrixXd reduced_matrix = matrix;
     // Reduce Rows
-    for (int i = 0; i < reduced_matrix.rows(); i++) {
+    for (int i = 0; i < reduced_matrix.rows(); i++)
+    {
         reduced_matrix.row(i) -= Eigen::VectorXd::Constant(reduced_matrix.cols(), reduced_matrix.row(i).minCoeff());
     }
 
     // Reduce Columns
-    for (int j = 0; j < reduced_matrix.cols(); j++) {
+    for (int j = 0; j < reduced_matrix.cols(); j++)
+    {
         reduced_matrix.col(j) -= Eigen::VectorXd::Constant(reduced_matrix.rows(), reduced_matrix.col(j).minCoeff());
     }
     return reduced_matrix;
 }
 
-void HungarianAlgorithm::Assigment_Optimize()
+void HungarianAlgorithm::Assignment_Optimize()
 {
-    std::cout << this->_reduced_cost_matrix << "\n";
-    for (int worker = 1; worker <= _rows; ++worker)
+    for (int worker = 1; worker <= _square_matrix_size; ++worker)
     {
         int cost = 0;
         int assignedJob = 0;
-        std::vector<bool> visited(this->_cols + 1, false);
-        std::vector<int> min_Values(this->_cols + 1, INF);
+        std::vector<bool> visited(this->_square_matrix_size + 1, false);
+        std::vector<int> min_Values(this->_square_matrix_size + 1, INF);
         this->_assignment[0] = worker;
 
         while (true)
@@ -53,60 +58,49 @@ void HungarianAlgorithm::Assigment_Optimize()
             int delta = INF;
             int next_Job = 0;
             int currentWorker = _assignment[assignedJob];
-
-            for ( int job = 1; job <= _cols; ++job)
+            for (int job = 1; job <= _square_matrix_size; ++job)
             {
-                if(!visited[job])
+                if (!visited[job])
                 {
                     cost = this->_reduced_cost_matrix(currentWorker - 1, job - 1) - this->_u[currentWorker] - this->_v[job];
 
-                    if ( cost < min_Values[job] )
+                    if (cost < min_Values[job])
                     {
                         min_Values[job] = cost;
                         this->_path[job] = assignedJob;
                     }
 
-                    if ( min_Values[job] < delta )
+                    if (min_Values[job] < delta)
                     {
                         delta = min_Values[job];
                         next_Job = job;
                     }
                 }
-                std::cout << "Job: " << job << std::endl;
-                std::cout << "Cost: " << this->_reduced_cost_matrix(currentWorker - 1, job - 1) << " - " << this->_u[currentWorker] << " - " << this->_v[job] << " = " << cost << std::endl;
-                std::cout << "Min Values[" << job << "]: " << min_Values[job] << std::endl;
-                std::cout << "Path[" << job << "]: " << this->_path[job] << std::endl;
             }
 
-            std::cout << "Delta: " << delta << std::endl;
-            std::cout << "Next Job: " << next_Job << std::endl;
             Update_Labels(delta, visited, min_Values);
             assignedJob = next_Job;
-            
+
             if (this->_assignment[assignedJob] == 0)
                 break;
         }
         Augment_Path(assignedJob);
-        std::cout << "-----------------------------------------------------------\n";
     }
 }
 
-void HungarianAlgorithm::Update_Labels(int delta, const std::vector<bool>& visited, std::vector<int>& minValues)
+void HungarianAlgorithm::Update_Labels(int delta, const std::vector<bool> &visited, std::vector<int> &minValues)
 {
-    std::cout << "vissted = [" << visited[0] << "-" << visited[1] << "-" << visited[2] << "-" << visited[3] << "]\n";
-    for( int job = 0; job <= this->_cols; job++)
+    for (int job = 0; job <= this->_square_matrix_size; job++)
     {
-        if(!visited[job])
+        if (!visited[job])
         {
-            this->_u[job] += delta;
+            this->_u[this->_assignment[job]] += delta;
             this->_v[job] -= delta;
-        } else {
+        }
+        else
+        {
             minValues[job] -= delta;
         }
-        
-        std::cout << "u[" << this->_assignment[job] << "]: " << this->_u[this->_assignment[job]] << std::endl;
-        std::cout << "v[" << job << "]: " << this->_v[job] << std::endl;
-        std::cout << "Min Values[" << job << "]: " << minValues[job] << std::endl;
     }
 }
 
@@ -118,22 +112,42 @@ void HungarianAlgorithm::Augment_Path(int assignedJob)
         this->_assignment[assignedJob] = this->_assignment[previous_Job];
         assignedJob = previous_Job;
 
-        std::cout << "Assigned Job: " << assignedJob << std::endl;
-        std::cout << "Previous Job: " << previous_Job << std::endl;
-        std::cout << "Assignment[" << assignedJob << "]: " << this->_assignment[assignedJob] << std::endl;
-
-        if (assignedJob == 0) break;
+        if (assignedJob == 0)
+            break;
     }
 }
 
-void HungarianAlgorithm::Extract_Assignment(std::vector<int> &assignment_results, Eigen::MatrixXd &matching_assignment)
+void HungarianAlgorithm::Extract_Assignment(std::vector<int> &assignment_results, Eigen::MatrixXd &matching_assignment, double &total_cost)
 {
     assignment_results.resize(this->_rows);
     matching_assignment = Eigen::MatrixXd::Constant(this->_rows, this->_cols, 0);
-    for (int job = 1; job <= this->_cols; job++)
+    total_cost = 0.0;
+    for (int job = 1; job <= this->_square_matrix_size; job++)
     {
-        assignment_results[this->_assignment[job] - 1] = job - 1;
-        matching_assignment(this->_assignment[job] - 1, job - 1) = 1;
-        std::cout << "Final Assignment - Worker: " << this->_assignment[job] - 1 << ", Job: " << job - 1 << std::endl;
+        if (this->_assignment[job] <= this->_rows)
+        { 
+            // Ignore dummy rows
+            int worker = this->_assignment[job] - 1;
+            int actual_job = job - 1;
+            assignment_results[worker] = actual_job;
+            if (job <= this->_cols) {
+                matching_assignment(worker, actual_job) = 1;
+                total_cost += this->_cost_matrix(worker, actual_job);
+            }
+        }
     }
+
+}
+
+Eigen::MatrixXd HungarianAlgorithm::create_CostMatrix(const std::vector<std::vector<double>> &values) {
+    size_t rows = values.size();
+    size_t cols = values[0].size();
+    Eigen::MatrixXd matrix(rows, cols);
+
+    for (size_t i = 0; i < rows; ++i) {
+        for (size_t j = 0; j < cols; ++j) {
+            matrix(i, j) = values[i][j];
+        }
+    }
+    return matrix;
 }
